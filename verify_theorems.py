@@ -484,7 +484,7 @@ def test_gamma_saturation():
 
     check(f"gamma=0.10 preserved at all {co1_steps} co=1 steps",
           violations == 0, f"violations={violations}")
-    check(f"Min ps>=10 density after co=1: {min_density:.3f} (paper min: 0.29)",
+    check(f"Min ps>=10 density after co=1: {min_density:.3f} (paper min: 0.29 for L>=50)",
           min_density >= 0.10)
 
 
