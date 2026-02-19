@@ -57,7 +57,7 @@ Runtime: ~15s
 | 1.3 | A | 1 | co=0, A>0 ⇒ non-palindrome (all 3-digit numbers) |
 | 1.3 | B | 1 | co=0, ps≥10 ⇒ A>0 (all 3-digit numbers) |
 | 1.3 | H | 1 | A>0 ⇒ some ps≥10 (10–9999) |
-| 2 | G | 4 | Transition table + trajectory verification (500 steps) |
+| 2 | G | 3 | Transition table + trajectory verification (500 steps) |
 | 2.1 | G=A | 8 | Generator–Absorber balance (8 bases) |
 | 2.3 | D | 1 | Parity-Carry Identity (1000 steps) |
 | 4.1 | E | 3 | Central Poison: all 13 three-digit Lychrel candidates |
