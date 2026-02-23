@@ -1,491 +1,682 @@
 #!/usr/bin/env python3
 """
-196 Carry Asymmetry Framework — Theorem Verification Script
+196 Carry Asymmetry Framework — 定理検証スクリプト
+==================================================
 
-Computationally verifies the theorems in:
-"The 196 Problem: Carry Asymmetry Framework and Density Theory
- for the Lychrel Conjecture"
+論文 "Carry Asymmetry, Palindrome Characterization, and Conditional
+Non-Convergence in the Reverse-and-Add Process" (Ando, 2026) の
+全定理を計算的に検証する。
 
-Authors: Ando; Claude Opus 4.6 (Anthropic)
-
-Usage:
-    python3 verify_theorems.py
-
-Requirements: Python 3.7+, no external dependencies.
-Expected runtime: ~15 seconds.
+依存ライブラリ: なし（Python 3.7+ 標準ライブラリのみ）
+実行: python3 verify_theorems.py
 """
 
-import sys
 import time
+from typing import List, Tuple, Dict
 
 # ============================================================
-# 共通関数
+# 基本関数群
 # ============================================================
 
-def raa(n: int) -> int:
-    """Reverse-and-Add: n + reverse(n)"""
-    return n + int(str(n)[::-1])
+def digits(n: int, base: int = 10) -> List[int]:
+    """整数 n の桁表現を返す（d[0] が最下位桁）"""
+    if n == 0:
+        return [0]
+    ds = []
+    while n > 0:
+        ds.append(n % base)
+        n //= base
+    return ds
 
 
-def raa_base2(n: int) -> int:
-    """基数2でのReverse-and-Add"""
-    bits = bin(n)[2:]
-    return n + int(bits[::-1], 2)
+def from_digits(ds: List[int], base: int = 10) -> int:
+    """桁表現から整数を復元"""
+    return sum(d * base**i for i, d in enumerate(ds))
 
 
-def analyze(n: int, base: int = 10):
-    """
-    数値 n を解析し、ペア和・キャリーチェーン・非対称度を返す。
+def reverse_number(n: int, base: int = 10) -> int:
+    """桁を逆転した数を返す"""
+    ds = digits(n, base)
+    return from_digits(ds[::-1], base)
 
-    戻り値:
-        digits  : 桁列 (LSBファースト)
-        ps      : ペア和 ps_i = d_i + d_{L-1-i}
-        carry   : キャリーチェーン c_0, ..., c_L
-        co      : キャリーアウト c_L
-        A       : 非対称度 (carry[i] != carry[L-1-i] となる位置の数)
-    """
-    if base == 10:
-        digits = list(map(int, str(n)))[::-1]
-    elif base == 2:
-        digits = list(map(int, bin(n)[2:]))[::-1]
-    else:
-        digits = []
-        tmp = n
-        while tmp > 0:
-            digits.append(tmp % base)
-            tmp //= base
-        if not digits:
-            digits = [0]
 
-    L = len(digits)
-    ps = [digits[i] + digits[L - 1 - i] for i in range(L)]
+def raa(n: int, base: int = 10) -> int:
+    """Reverse-and-Add: n + rev(n)"""
+    return n + reverse_number(n, base)
 
-    carry = [0] * (L + 1)
+
+def is_palindrome(n: int, base: int = 10) -> bool:
+    """回文判定"""
+    ds = digits(n, base)
+    return ds == ds[::-1]
+
+
+def pair_sums(n: int, base: int = 10) -> List[int]:
+    """ペアサム列 ps_i = d_i + d_{L-1-i} を返す"""
+    ds = digits(n, base)
+    L = len(ds)
+    return [ds[i] + ds[L - 1 - i] for i in range(L)]
+
+
+def carry_chain(n: int, base: int = 10) -> List[int]:
+    """n + rev(n) のキャリーチェーン c_0, c_1, ..., c_L を返す"""
+    ps = pair_sums(n, base)
+    L = len(ps)
+    c = [0] * (L + 1)
     for i in range(L):
-        carry[i + 1] = (ps[i] + carry[i]) // base
-    co = carry[L]
-
-    A = sum(1 for i in range(L // 2) if carry[i] != carry[L - 1 - i])
-
-    return digits, ps, carry, co, A
+        c[i + 1] = (ps[i] + c[i]) // base
+    return c
 
 
-def transition(ps_val: int, base: int = 10) -> int:
-    """遷移公式: ps' = (ps mod b) + ((ps+1) mod b)"""
-    return (ps_val % base) + ((ps_val + 1) % base)
+def carry_symmetric(carries: List[int]) -> bool:
+    """キャリーチェーンが左右対称か（c_i == c_{L-i}）"""
+    L = len(carries) - 1
+    return all(carries[i] == carries[L - i] for i in range(L + 1))
 
 
-def is_palindrome(s: str) -> bool:
-    return s == s[::-1]
+def output_digits(n: int, base: int = 10) -> List[int]:
+    """n + rev(n) の出力桁列"""
+    ps = pair_sums(n, base)
+    c = carry_chain(n, base)
+    L = len(ps)
+    out = [(ps[i] + c[i]) % base for i in range(L)]
+    if c[L] == 1:
+        out.append(1)
+    return out
 
 
 # ============================================================
-# テストフレームワーク
+# テスト基盤
 # ============================================================
 
 passed = 0
 failed = 0
+test_details = []
 
 
-def check(name: str, condition: bool, detail: str = ""):
-    """テスト結果を記録・表示"""
+def test(name: str, condition: bool, detail: str = ""):
+    """テスト結果を記録"""
     global passed, failed
     if condition:
         passed += 1
-        print(f"  [PASS] {name}")
+        status = "PASS"
     else:
         failed += 1
-        print(f"  [FAIL] {name}  {detail}")
+        status = "FAIL"
+    test_details.append((name, status, detail))
+    if not condition:
+        print(f"  *** FAIL: {name} — {detail}")
 
 
 # ============================================================
-# Section 1: Carry Asymmetry Theory
+# Section 1: 基本的な RAA 計算
 # ============================================================
 
 def test_basic_raa():
-    """論文Section 1冒頭の計算例"""
-    print("\n=== Section 1: Basic RAA computation ===")
-    check("196 + 691 = 887", raa(196) == 887)
-    check("887 + 788 = 1675", raa(887) == 1675)
-
-
-def test_example_196():
-    """論文Section 1.1のExample: 196の解析"""
-    print("\n=== Section 1.1: Example — 196 analysis ===")
-    digits, ps, carry, co, A = analyze(196)
-    check("digits = [6,9,1] (LSB first)", digits == [6, 9, 1])
-    check("ps = [7,18,7]", ps == [7, 18, 7])
-    check("carry = [0,0,1,0]", carry == [0, 0, 1, 0])
-    check("carry-out = 0", co == 0)
-    check("A = 1 (pos 0: carry[0]=0 != carry[2]=1)", A == 1)
-
-
-def test_theorem_C():
-    """Theorem C (Pair Sum Equivalence): (all ps<10) <=> (A=0, co=0)
-    論文Section 1.2"""
-    print("\n=== Theorem C: Pair Sum Equivalence (10-9999) ===")
-    violations = 0
-    tested = 0
-    for n in range(10, 10000):
-        _, ps, _, co, A = analyze(n)
-        all_ps_lt10 = all(p < 10 for p in ps)
-        cond = (A == 0 and co == 0)
-        tested += 1
-        if all_ps_lt10 != cond:
-            violations += 1
-    check(f"(all ps<10) <=> (A=0, co=0): {tested} cases, 0 violations",
-          violations == 0, f"violations={violations}")
-
-    # 論文の反例: 29+92=121 は回文だが ps=[11,11], co=1
-    _, ps_29, _, co_29, _ = analyze(29)
-    result_29 = raa(29)
-    check("Counterexample: 29+92=121 palindrome with ps=[11,11], co=1",
-          co_29 == 1 and ps_29 == [11, 11] and result_29 == 121
-          and is_palindrome(str(result_29)))
-
-
-def test_theorem_A():
-    """Theorem A (Non-palindrome): co=0, A>0 => non-palindrome
-    論文Section 1.3"""
-    print("\n=== Theorem A: co=0, A>0 => non-palindrome (all 3-digit) ===")
-    violations = 0
-    tested = 0
-    for n in range(100, 1000):
-        _, _, _, co, A = analyze(n)
-        if co == 0 and A > 0:
-            tested += 1
-            if is_palindrome(str(raa(n))):
-                violations += 1
-    check(f"{tested} cases with co=0, A>0: 0 palindromes",
-          violations == 0, f"violations={violations}")
-
-
-def test_theorem_B():
-    """Theorem B: co=0, ps>=10 exists => A>0 (same step)
-    論文Section 1.3"""
-    print("\n=== Theorem B: co=0, ps>=10 => A>0 (all 3-digit) ===")
-    violations = 0
-    tested = 0
-    for n in range(100, 1000):
-        _, ps, _, co, A = analyze(n)
-        if co == 0 and any(p >= 10 for p in ps):
-            tested += 1
-            if A == 0:
-                violations += 1
-    check(f"{tested} cases with co=0, ps>=10: all have A>0",
-          violations == 0, f"violations={violations}")
-
-
-def test_theorem_H():
-    """Theorem H (Converse): A>0 => some ps>=10 exists
-    論文Section 1.3"""
-    print("\n=== Theorem H: A>0 => some ps>=10 (10-9999) ===")
-    violations = 0
-    tested = 0
-    for n in range(10, 10000):
-        _, ps, _, _, A = analyze(n)
-        if A > 0:
-            tested += 1
-            if not any(p >= 10 for p in ps):
-                violations += 1
-    check(f"{tested} cases with A>0: all have some ps>=10",
-          violations == 0, f"violations={violations}")
-
-
-# ============================================================
-# Section 2: Poison Feedback Loop
-# ============================================================
-
-def test_theorem_G_table():
-    """Theorem G (Transition Formula): 遷移テーブル
-    論文Section 2"""
-    print("\n=== Theorem G: Transition table ===")
-    paper_values = [1, 3, 5, 7, 9, 11, 13, 15, 17,
-                    9, 1, 3, 5, 7, 9, 11, 13, 15, 17]
-    computed = [transition(p) for p in range(19)]
-    check("Transition table matches paper", computed == paper_values)
-
-    generators = sum(1 for p in range(19) if transition(p) >= 10)
-    preservers = sum(1 for p in range(19) if transition(p) == 9)
-    absorbers = sum(1 for p in range(19) if transition(p) < 9)
-    check("G=8, P=3, A=8",
-          generators == 8 and preservers == 3 and absorbers == 8)
-
-
-def test_theorem_G_trajectory():
-    """Theorem G: 196軌道上で遷移公式を検証"""
-    print("\n=== Theorem G: Trajectory verification (500 steps) ===")
-    n = 196
-    violations = 0
-    tested = 0
-    for _ in range(500):
-        d1, ps1, c1, co1, _ = analyze(n)
-        L1 = len(d1)
-        asym1 = [i for i in range(L1 // 2) if c1[i] != c1[L1 - 1 - i]]
-
-        n_next = raa(n)
-        _, ps2, _, _, _ = analyze(n_next)
-        L2 = len(str(n_next))
-
-        if co1 == 0:
-            for i in asym1:
-                if i < L2:
-                    tested += 1
-                    if transition(ps1[i]) != ps2[i]:
-                        violations += 1
-        n = n_next
-    check(f"Transition holds at {tested} asymmetry positions",
-          violations == 0, f"violations={violations}")
-
-
-def test_ga_equilibrium():
-    """G=A Equilibrium: Generator = Absorber in every base
-    論文Section 2.1"""
-    print("\n=== G=A Equilibrium (multiple bases) ===")
-    for b in [2, 3, 5, 7, 10, 13, 16, 20]:
-        g, a = 0, 0
-        for ps_val in range(2 * b - 1):
-            t = transition(ps_val, b)
-            if t >= b:
-                g += 1
-            elif t < b - 1:
-                a += 1
-        check(f"Base {b}: G={g} == A={a}", g == a)
-
-
-def test_theorem_D():
-    """Theorem D (Parity-Carry Identity): #{odd ps'} = 2A(n) when co=0
-    論文Section 2.3"""
-    print("\n=== Theorem D: Parity-Carry Identity (1000 steps) ===")
-    n = 196
-    violations = 0
-    tested = 0
-    for _ in range(1000):
-        _, _, _, co1, A1 = analyze(n)
-        n_next = raa(n)
-        _, ps2, _, _, _ = analyze(n_next)
-        if co1 == 0:
-            odd_count = sum(1 for p in ps2 if p % 2 == 1)
-            tested += 1
-            if odd_count != 2 * A1:
-                violations += 1
-        n = n_next
-    check(f"#(odd ps') = 2*A(n) at {tested} co=0 steps",
-          violations == 0, f"violations={violations}")
-
-
-# ============================================================
-# Section 4: Why Base 10 Is Singular
-# ============================================================
-
-def test_theorem_E():
-    """Theorem E (Central Poison): All 13 three-digit Lychrel candidates
-    have central poison (ps[1] >= 10).
-    論文Section 4.1"""
-    print("\n=== Theorem E: Central Poison (3-digit Lychrel) ===")
-    print("  (Identifying Lychrel candidates... ~15s)")
-    lychrel = []
-    for n in range(100, 1000):
-        x = n
-        found = False
-        for _ in range(500):
-            x = raa(x)
-            if is_palindrome(str(x)):
-                found = True
-                break
-        if not found:
-            lychrel.append(n)
-
-    expected = [196, 295, 394, 493, 592, 689, 691,
-                788, 790, 879, 887, 978, 986]
-    check("3-digit Lychrel candidates = 13", lychrel == expected,
-          f"got {lychrel}")
-
-    all_central = all(analyze(n)[1][1] >= 10 for n in lychrel)
-    check("All 13 have central poison (ps[1] >= 10)", all_central)
-
-    # 論文Table: Edge-only poison → 0 Lychrel candidates
-    edge_only_lychrel = 0
-    for n in lychrel:
-        _, ps, _, _, _ = analyze(n)
-        if ps[0] >= 10 and ps[1] < 10:
-            edge_only_lychrel += 1
-    check("Edge-only poison => 0 Lychrel candidates",
-          edge_only_lychrel == 0)
-
-
-def test_theorem_F():
-    """Theorem F (Poison Count Formula): Generator counts by base
-    論文Section 4.2"""
-    print("\n=== Theorem F: Generator count formula ===")
-    for b in [2, 3, 5, 10, 16]:
-        g = sum(1 for ps_val in range(2 * b - 1)
-                if transition(ps_val, b) >= b)
-        if b == 2:
-            expected = 0
-        elif b % 2 == 1:
-            expected = b - 1
-        else:
-            expected = b - 2
-        check(f"Base {b}: G={g} (formula={expected})", g == expected)
-
-    # Base 2 uniqueness
-    check("Base 2 is unique with G=0 (among bases 2-30)",
-          all(
-              sum(1 for p in range(2 * b - 1)
-                  if transition(p, b) >= b) > 0
-              for b in range(3, 31)
-          ))
-
-
-def test_base2_lychrel():
-    """Section 4.3: Base-2 Lychrel re-derivation (10110_2 = 22)"""
-    print("\n=== Section 4.3: Base-2 Lychrel re-derivation ===")
-
-    # 基数2: 全遷移がPreserver (ps'=1)
-    all_preservers = all(transition(p, 2) == 1 for p in range(3))
-    check("Base 2: all transitions => Preserver (ps'=1)", all_preservers)
-
-    g = sum(1 for p in range(3) if transition(p, 2) >= 2)
-    a = sum(1 for p in range(3) if transition(p, 2) < 1)
-    check("Base 2: G=0, Absorber=0", g == 0 and a == 0)
-
-    # 論文: verified 5,000 steps, minimum ps=2 count = 1
-    n = 22
-    min_ps2 = float('inf')
-    for _ in range(5000):
-        _, ps, _, _, _ = analyze(n, base=2)
-        ps2_count = sum(1 for p in ps if p == 2)
-        min_ps2 = min(min_ps2, ps2_count)
-        n = raa_base2(n)
-    check(f"5000 steps: min #(ps=2) = {min_ps2} >= 1", min_ps2 >= 1)
-
-
-# ============================================================
-# Section 5: Probabilistic Density Theory
-# ============================================================
-
-def test_stationary_distribution():
-    """Stationary distribution pi = [1/2, 1/2]
-    論文Section 5.1"""
-    print("\n=== Section 5.1: Stationary distribution ===")
-    n = 196
-    carry1 = 0
-    positions = 0
-    for _ in range(1000):
-        _, _, carry, _, _ = analyze(n)
-        L = len(carry) - 1
-        for i in range(1, L):
-            carry1 += carry[i]
-            positions += 1
+    """基本的な RAA 計算の確認"""
+    # 196 + 691 = 887
+    test("RAA(196)=887", raa(196) == 887, f"got {raa(196)}")
+    # 887 + 788 = 1675
+    test("RAA(887)=1675", raa(887) == 1675, f"got {raa(887)}")
+    # 89 は 24 回で回文に到達
+    n = 89
+    for _ in range(24):
         n = raa(n)
-    ratio = carry1 / positions
-    check(f"carry=1 fraction = {ratio:.4f} (theory: 0.5000)",
-          abs(ratio - 0.5) < 0.01)
-
-
-def test_theorem_8():
-    """Theorem 8 (Carry Injection):
-    P(palindrome -> palindrome) = (4/9) * 2^{-(L/2 - 1)}
-    論文Section 5.4, verified exactly for L=2,...,8"""
-    print("\n=== Theorem 8: Carry Injection (even L = 2,4,6,8) ===")
-    for L in [2, 4, 6, 8]:
-        total = 0
-        pal_after = 0
-        for n in range(10 ** (L - 1), 10 ** L):
-            s = str(n)
-            if is_palindrome(s):
-                total += 1
-                if is_palindrome(str(raa(n))):
-                    pal_after += 1
-        prob = pal_after / total
-        theory = (4 / 9) * 2 ** (-(L // 2 - 1))
-        check(f"L={L}: measured={prob:.6f}, theory={theory:.6f}",
-              abs(prob - theory) < 1e-6)
+    test("89→24steps→palindrome",
+         is_palindrome(n), f"step 24: {n}")
 
 
 # ============================================================
-# Section 6: Measured Statistics
+# Section 2: 定義の検証
+# ============================================================
+
+def test_definitions():
+    """Definition 2.1–2.6 の基本動作確認"""
+    # 196: digits = [6, 9, 1], pair sums = [6+1, 9+9, 1+6] = [7, 18, 7]
+    ds = digits(196)
+    test("digits(196)=[6,9,1]", ds == [6, 9, 1], f"got {ds}")
+
+    ps = pair_sums(196)
+    test("pair_sums(196)=[7,18,7]", ps == [7, 18, 7], f"got {ps}")
+
+    # ペアサム対称性: ps_i == ps_{L-1-i}
+    test("pair_sum_symmetry",
+         all(ps[i] == ps[len(ps) - 1 - i] for i in range(len(ps))))
+
+    # キャリーチェーン: c_0=0, c_1=floor(7/10)=0, c_2=floor(18/10)=1, c_3=floor(7+1)/10=0
+    c = carry_chain(196)
+    test("carry_chain(196)=[0,0,1,0]",
+         c == [0, 0, 1, 0], f"got {c}")
+
+    # 出力桁: o_0=(7+0)%10=7, o_1=(18+0)%10=8, o_2=(7+1)%10=8, c_L=0
+    out = output_digits(196)
+    test("output_digits(196)=[7,8,8]",
+         out == [7, 8, 8], f"got {out}")
+
+    # 887 = 7+8+8*10+... → digits [7,8,8]
+    test("196+691=887", from_digits(out) == 887)
+
+    # 196 のキャリーチェーンは左右非対称
+    test("196_carry_not_symmetric", not carry_symmetric(c))
+
+
+# ============================================================
+# Section 3.1: Theorem 3.1 — Carry Asymmetry
+# ============================================================
+
+def test_theorem_3_1():
+    """
+    Theorem 3.1 (Carry Asymmetry):
+    ps_j >= b かつ c_L = 0 ならば、キャリーチェーンは左右非対称。
+    複数の基数・桁数で網羅的に検証。
+    """
+    violations = 0
+    total = 0
+    for base in [2, 3, 5, 10]:
+        for L in range(2, 7):
+            lo = base ** (L - 1)
+            hi = base ** L
+            for n in range(lo, min(hi, lo + 2000)):
+                ps = pair_sums(n, base)
+                c = carry_chain(n, base)
+                has_generator = any(p >= base for p in ps)
+                cL_zero = (c[-1] == 0)
+                if has_generator and cL_zero:
+                    total += 1
+                    if carry_symmetric(c):
+                        violations += 1
+    test("Thm3.1_carry_asymmetry",
+         violations == 0,
+         f"{violations}/{total} violations")
+
+
+# ============================================================
+# Section 3.1: Proposition 3.2 — c_L=0 で非回文
+# ============================================================
+
+def test_proposition_3_2():
+    """
+    Proposition 3.2:
+    ps_j >= b かつ c_L = 0 ならば n + rev(n) は回文でない。
+    """
+    violations = 0
+    total = 0
+    for base in [3, 5, 10]:
+        for L in range(2, 6):
+            lo = base ** (L - 1)
+            hi = base ** L
+            for n in range(lo, min(hi, lo + 3000)):
+                ps = pair_sums(n, base)
+                c = carry_chain(n, base)
+                has_generator = any(p >= base for p in ps)
+                cL_zero = (c[-1] == 0)
+                if has_generator and cL_zero:
+                    total += 1
+                    s = raa(n, base)
+                    if is_palindrome(s, base):
+                        violations += 1
+    test("Prop3.2_cL0_not_palindrome",
+         violations == 0,
+         f"{violations}/{total} violations")
+
+
+# ============================================================
+# Section 3.2: Theorem 3.4 — Carry-Free Palindrome (Case I)
+# ============================================================
+
+def test_theorem_3_4():
+    """
+    Theorem 3.4 (Carry-Free Palindrome):
+    (前方) 全ての ps_i < b ⟹ c_L=0 かつ palindrome
+    (逆方) c_L=0 かつ palindrome ⟹ 全ての ps_i < b
+    """
+    fwd_violations = 0
+    fwd_total = 0
+    rev_violations = 0
+    rev_total = 0
+    for base in [3, 5, 10]:
+        for L in range(2, 6):
+            lo = base ** (L - 1)
+            hi = base ** L
+            for n in range(lo, min(hi, lo + 3000)):
+                ps = pair_sums(n, base)
+                c = carry_chain(n, base)
+                s = raa(n, base)
+                pal = is_palindrome(s, base)
+                all_ps_lt_b = all(p < base for p in ps)
+
+                # 前方向: 全 ps_i < b → 回文
+                if all_ps_lt_b:
+                    fwd_total += 1
+                    if not (c[-1] == 0 and pal):
+                        fwd_violations += 1
+
+                # 逆方向: c_L=0 かつ回文 → 全 ps_i < b
+                if c[-1] == 0 and pal:
+                    rev_total += 1
+                    if not all_ps_lt_b:
+                        rev_violations += 1
+
+    test("Thm3.4_forward_all_ps_lt_b→pal",
+         fwd_violations == 0,
+         f"{fwd_violations}/{fwd_total} violations")
+    test("Thm3.4_converse_cL0_pal→all_ps_lt_b",
+         rev_violations == 0,
+         f"{rev_violations}/{rev_total} violations")
+
+
+# ============================================================
+# Section 3.2: Theorem 3.5 — Pair-Sum Degeneracy (Necessity)
+# ============================================================
+
+def test_theorem_3_5():
+    """
+    Theorem 3.5 (Pair-Sum Degeneracy: Necessity):
+    c_L = 1 かつ palindrome ⟹ 全 ps_i ∈ {0, b+1}
+    """
+    violations = 0
+    palindromes_found = 0
+    for base in [3, 5, 10, 16]:
+        for L in range(2, 7):
+            lo = base ** (L - 1)
+            hi = base ** L
+            for n in range(lo, min(hi, lo + 5000)):
+                c = carry_chain(n, base)
+                if c[-1] != 1:
+                    continue
+                s = raa(n, base)
+                if not is_palindrome(s, base):
+                    continue
+                palindromes_found += 1
+                ps = pair_sums(n, base)
+                if not all(p in (0, base + 1) for p in ps):
+                    violations += 1
+    test("Thm3.5_cL1_pal→ps_in_{0,b+1}",
+         violations == 0,
+         f"{violations} violations among {palindromes_found} cL=1 palindromes")
+
+
+# ============================================================
+# Section 3.2: Theorem 3.6 — Pair-Sum Degeneracy (Sufficiency)
+# ============================================================
+
+def test_theorem_3_6():
+    """
+    Theorem 3.6 (Pair-Sum Degeneracy: Sufficiency):
+    全 ps_i ∈ {0, b+1} かつ c_L = 1 ⟹ palindrome
+    """
+    violations = 0
+    total = 0
+    for base in [2, 3, 5, 10, 16]:
+        bp1 = base + 1
+        max_ps = 2 * (base - 1)
+        if bp1 > max_ps:
+            continue  # base=2: b+1=3 > 2, Case II は不可能
+        for L in range(2, 9):
+            # ps_i ∈ {0, b+1} のパターンを列挙
+            # L 桁なのでペアサムは対称: ps_i = ps_{L-1-i}
+            # 独立なのは ceil(L/2) 個
+            half = (L + 1) // 2
+            for mask in range(2**half):
+                # 各独立位置のペアサムを決定
+                ps_half = []
+                for j in range(half):
+                    if mask & (1 << j):
+                        ps_half.append(bp1)
+                    else:
+                        ps_half.append(0)
+                # 対称にして全 ps を構成
+                ps_full = ps_half + ps_half[:L - half][::-1]
+                # キャリーチェーンを計算
+                c = [0] * (L + 1)
+                for i in range(L):
+                    c[i + 1] = (ps_full[i] + c[i]) // base
+                if c[L] != 1:
+                    continue
+                total += 1
+                # 出力桁を計算
+                out = [(ps_full[i] + c[i]) % base for i in range(L)]
+                out.append(1)  # c_L = 1
+                # 回文判定
+                if out != out[::-1]:
+                    violations += 1
+    test("Thm3.6_ps_degen_suf→pal",
+         violations == 0,
+         f"{violations}/{total} violations")
+
+
+# ============================================================
+# Section 3.2: Theorem 3.7 — Complete Palindrome Characterization
+# ============================================================
+
+def test_theorem_3_7():
+    """
+    Theorem 3.7 (Complete Palindrome Characterization):
+    n + rev(n) が回文 ⟺ Case I (全 ps_i < b) または Case II (全 ps_i ∈ {0, b+1})
+    全方向を検証。
+    """
+    violations = 0
+    total = 0
+    for base in [3, 5, 10]:
+        for L in range(2, 6):
+            lo = base ** (L - 1)
+            hi = base ** L
+            for n in range(lo, min(hi, lo + 5000)):
+                total += 1
+                ps = pair_sums(n, base)
+                s = raa(n, base)
+                pal = is_palindrome(s, base)
+                case_I = all(p < base for p in ps)
+                case_II = all(p in (0, base + 1) for p in ps)
+                char = case_I or case_II
+
+                # 回文 ⟺ (Case I or Case II)
+                if pal != char:
+                    violations += 1
+    test("Thm3.7_complete_char",
+         violations == 0,
+         f"{violations}/{total} violations")
+
+
+# ============================================================
+# Section 3.2: Corollary 3.9 — 196 軌道の非回文性
+# ============================================================
+
+def test_corollary_3_9():
+    """
+    Corollary 3.9 (Equivalent Formulation):
+    196 軌道の最初 2000 ステップが全て非回文であることを
+    Theorem 3.7 の条件で確認。
+    """
+    n = 196
+    steps = 2000
+    cL0_count = 0
+    cL1_count = 0
+    all_non_pal = True
+
+    for t in range(steps):
+        ps = pair_sums(n)
+        c = carry_chain(n)
+        has_gen = any(p >= 10 for p in ps)
+        has_non_degen = any(p not in (0, 11) for p in ps)
+
+        if c[-1] == 0:
+            cL0_count += 1
+            if not has_gen:
+                all_non_pal = False
+        else:
+            cL1_count += 1
+            if not has_non_degen:
+                all_non_pal = False
+        n = raa(n)
+
+    test("Cor3.9_196_2000steps_all_nonpal",
+         all_non_pal,
+         f"cL=0: {cL0_count}, cL=1: {cL1_count}")
+
+    # 論文記載値との照合: cL=0 が 1169, cL=1 が 831
+    test("Cor3.9_cL0_count=1169",
+         cL0_count == 1169,
+         f"got {cL0_count}")
+    test("Cor3.9_cL1_count=831",
+         cL1_count == 831,
+         f"got {cL1_count}")
+
+
+# ============================================================
+# Section 3.2: Remark 3.8 — Case II 回文の実例
+# ============================================================
+
+def test_remark_case_II_example():
+    """
+    Remark 3.8: n=9002 → ps=(11,0,0,11) → 9002+2009=11011（回文、c_L=1）
+    """
+    n = 9002
+    ps = pair_sums(n)
+    test("CaseII_example_ps",
+         ps == [11, 0, 0, 11], f"got {ps}")
+    s = raa(n)
+    test("CaseII_example_sum",
+         s == 11011, f"got {s}")
+    test("CaseII_example_palindrome",
+         is_palindrome(s))
+    c = carry_chain(n)
+    test("CaseII_example_cL=1",
+         c[-1] == 1, f"c_L={c[-1]}")
+
+
+# ============================================================
+# Section 4: Proposition 4.1 — キャリー一致確率
+# ============================================================
+
+def test_proposition_4_1():
+    """
+    Proposition 4.1: c_L=0 ステップでの I_k = 1[c_k == c_{L-1-k}] の
+    無条件一致確率 ρ ≈ 0.502
+    """
+    n = 196
+    match_count = 0
+    total_positions = 0
+    for t in range(2000):
+        c = carry_chain(n)
+        L = len(c) - 1
+        if c[-1] != 0:
+            n = raa(n)
+            continue
+        for k in range(L // 2):
+            total_positions += 1
+            if c[k] == c[L - 1 - k]:
+                match_count += 1
+        n = raa(n)
+
+    rho = match_count / total_positions if total_positions > 0 else 0
+    test("Prop4.1_rho≈0.502",
+         abs(rho - 0.502) < 0.01,
+         f"ρ = {rho:.4f}")
+
+
+# ============================================================
+# Section 6: Proposition 6.1 — Carry Markov Chain
+# ============================================================
+
+def test_proposition_6_1():
+    """
+    Proposition 6.1: キャリーマルコフ連鎖の遷移確率と第二固有値 λ₂ = 1/b
+    """
+    for base in [2, 3, 5, 10, 16]:
+        # 理論値
+        p01_theory = (base - 1) / (2 * base)  # P(0→1)
+        p11_theory = (base + 1) / (2 * base)  # P(1→1)
+        lambda2_theory = 1 / base
+
+        # 数値計算: 全 (d_i, d_{L-1-i}) ペアでの遷移
+        transitions = {(0, 0): 0, (0, 1): 0, (1, 0): 0, (1, 1): 0}
+        for d1 in range(base):
+            for d2 in range(base):
+                ps = d1 + d2
+                for c_in in [0, 1]:
+                    c_out = (ps + c_in) // base
+                    transitions[(c_in, c_out)] += 1
+
+        total_from_0 = transitions[(0, 0)] + transitions[(0, 1)]
+        total_from_1 = transitions[(1, 0)] + transitions[(1, 1)]
+        p01_empirical = transitions[(0, 1)] / total_from_0
+        p11_empirical = transitions[(1, 1)] / total_from_1
+
+        test(f"Prop6.1_base{base}_P(0→1)",
+             abs(p01_empirical - p01_theory) < 1e-10,
+             f"theory={p01_theory:.4f}, got={p01_empirical:.4f}")
+        test(f"Prop6.1_base{base}_P(1→1)",
+             abs(p11_empirical - p11_theory) < 1e-10,
+             f"theory={p11_theory:.4f}, got={p11_empirical:.4f}")
+
+        # 第二固有値: λ₂ = P(0→0) - P(0→1) = (b+1)/(2b) - (b-1)/(2b) = 1/b
+        p00 = 1 - p01_empirical
+        lambda2_empirical = p00 - p01_empirical
+        test(f"Prop6.1_base{base}_λ₂=1/{base}",
+             abs(lambda2_empirical - lambda2_theory) < 1e-10,
+             f"theory={lambda2_theory:.4f}, got={lambda2_empirical:.4f}")
+
+
+# ============================================================
+# Section 6.2: Base 2 — Sprague 接続
+# ============================================================
+
+def test_base_2_sprague():
+    """
+    Base 2: Case II は不可能（b+1=3 > 2(b-1)=2）。
+    よって回文は Case I のみ。
+    10110₂ (=22) が Lychrel であることを確認。
+    """
+    # b+1 = 3 > max pair sum = 2 → Case II impossible
+    test("Base2_CaseII_impossible",
+         3 > 2 * (2 - 1))
+
+    # 22 (=10110₂) の軌道 5000 ステップ
+    n = 22  # 10110 in binary
+    ds = digits(n, 2)
+    test("22_binary=10110",
+         ds == [0, 1, 1, 0, 1], f"got {ds}")
+
+    never_palindrome = True
+    for t in range(5000):
+        n = raa(n, 2)
+        if is_palindrome(n, 2):
+            never_palindrome = False
+            break
+    test("Base2_10110_5000steps_no_palindrome",
+         never_palindrome)
+
+
+# ============================================================
+# Section 5: Wall W3 — Modular impossibility
+# ============================================================
+
+def test_wall_W3():
+    """
+    Wall W3: n + rev(n) mod m と回文 mod m は同じ残基集合を含む。
+    """
+    for m in [3, 7, 9, 11]:
+        raa_residues = set()
+        pal_residues = set()
+        for n in range(100, 10000):
+            raa_residues.add(raa(n) % m)
+        for n in range(100, 10000):
+            if is_palindrome(n):
+                pal_residues.add(n % m)
+        # 回文残基 ⊆ RAA残基
+        test(f"W3_mod{m}_pal⊆raa",
+             pal_residues.issubset(raa_residues),
+             f"pal={pal_residues}, raa={raa_residues}")
+
+
+# ============================================================
+# 196 軌道の統計量（論文 Section 3.3 の値との照合）
 # ============================================================
 
 def test_trajectory_statistics():
-    """196 trajectory statistics (3000 steps)
-    論文Section 6"""
-    print("\n=== Section 6: Trajectory statistics (3000 steps) ===")
+    """
+    196 軌道 2000 ステップの統計を論文記載値と照合。
+    """
     n = 196
-    co0 = 0
-    co1 = 0
-    A_min = float('inf')
-    A_max = 0
-    A_sum = 0
-    A_positive_all = True
-    ps_ge10_densities = []
+    cL0_with_gen = 0
+    cL0_even = 0
+    cL0_odd = 0
+    cL1_with_nondegen = 0
+    satisfies_both = 0
 
-    for _ in range(3000):
-        d, ps, _, co, A = analyze(n)
-        L = len(d)
-        if co == 0:
-            co0 += 1
-        else:
-            co1 += 1
-        A_min = min(A_min, A)
-        A_max = max(A_max, A)
-        A_sum += A
-        if A == 0:
-            A_positive_all = False
-        ps_ge10 = sum(1 for p in ps if p >= 10)
-        ps_ge10_densities.append(ps_ge10 / L)
+    for t in range(2000):
+        ps = pair_sums(n)
+        c = carry_chain(n)
+        L = len(ps)
+        has_gen = any(p >= 10 for p in ps)
+        has_nondegen = any(p not in (0, 11) for p in ps)
+        # 十分条件: ps_i ∈ {10,12,...,18} が存在
+        has_sufficient = any(p >= 10 and p != 11 for p in ps)
+
+        if c[-1] == 0 and has_gen:
+            cL0_with_gen += 1
+            if L % 2 == 0:
+                cL0_even += 1
+            else:
+                cL0_odd += 1
+        elif c[-1] == 1 and has_nondegen:
+            cL1_with_nondegen += 1
+
+        if has_sufficient:
+            satisfies_both += 1
+
         n = raa(n)
 
-    check(f"co=0 steps: {co0} (paper: 1735)", co0 == 1735)
-    check(f"co=1 steps: {co1} (paper: 1265)", co1 == 1265)
-    check(f"A min={A_min} (paper: 1)", A_min == 1)
-    check(f"A max={A_max} (paper: 350)", A_max == 350)
-    check(f"A mean={A_sum/3000:.1f} (paper: 156.6)",
-          abs(A_sum / 3000 - 156.6) < 0.1)
-    check("A > 0 at all 3000 steps", A_positive_all)
-
-    mean_density = sum(ps_ge10_densities) / len(ps_ge10_densities)
-    check(f"ps>=10 density={mean_density:.3f} (paper: 0.449)",
-          abs(mean_density - 0.449) < 0.002)
-
-    final_digits = len(str(n))
-    check(f"Final digit count={final_digits} (paper: 1268)",
-          final_digits == 1268)
+    # 論文記載値
+    test("traj_cL0_gen=1169",
+         cL0_with_gen == 1169, f"got {cL0_with_gen}")
+    test("traj_cL0_even=587",
+         cL0_even == 587, f"got {cL0_even}")
+    test("traj_cL0_odd=582",
+         cL0_odd == 582, f"got {cL0_odd}")
+    test("traj_cL1_nondegen=831",
+         cL1_with_nondegen == 831, f"got {cL1_with_nondegen}")
+    test("traj_total=2000",
+         cL0_with_gen + cL1_with_nondegen == 2000,
+         f"got {cL0_with_gen + cL1_with_nondegen}")
+    test("traj_sufficient_condition_all_2000",
+         satisfies_both == 2000,
+         f"got {satisfies_both}")
 
 
 # ============================================================
-# Section 7: Conditional Theorem
+# Generator / Absorber / Neutral の数え上げ
 # ============================================================
 
-def test_gamma_saturation():
-    """Theorem 9: gamma-saturation (gamma=0.10) preserved at co=1 steps
-    論文Section 7.2"""
-    print("\n=== Theorem 9: gamma-saturation at co=1 steps ===")
-    n = 196
-    violations = 0
-    co1_steps = 0
-    min_density = 1.0
+def test_generator_absorber_count():
+    """
+    Definition 2.6 の確認:
+    各 base b で generator = absorber = b-1 個、neutral = 1 個
+    """
+    for base in [2, 3, 5, 10, 16]:
+        max_ps = 2 * (base - 1)
+        generators = sum(1 for ps in range(max_ps + 1) if ps >= base)
+        absorbers = sum(1 for ps in range(max_ps + 1) if ps <= base - 2)
+        neutrals = sum(1 for ps in range(max_ps + 1) if ps == base - 1)
+        test(f"GA_base{base}_gen={base - 1}",
+             generators == base - 1,
+             f"got {generators}")
+        test(f"GA_base{base}_abs={base - 1}",
+             absorbers == base - 1,
+             f"got {absorbers}")
+        test(f"GA_base{base}_neutral=1",
+             neutrals == 1,
+             f"got {neutrals}")
 
-    for _ in range(3000):
-        _, _, _, co, _ = analyze(n)
-        n_next = raa(n)
 
-        if co == 1:
-            co1_steps += 1
-            d_next, ps_next, _, _, _ = analyze(n_next)
-            L_next = len(d_next)
-            density = sum(1 for p in ps_next if p >= 10) / L_next
-            min_density = min(min_density, density)
-            if density < 0.10:
-                violations += 1
+# ============================================================
+# Theorem 3.7 の追加検証: 異なる基数での完全性
+# ============================================================
 
-        n = n_next
-
-    check(f"gamma=0.10 preserved at all {co1_steps} co=1 steps",
-          violations == 0, f"violations={violations}")
-    check(f"Min ps>=10 density after co=1: {min_density:.3f} (paper min: 0.29 for L>=50)",
-          min_density >= 0.10)
+def test_complete_char_multibase():
+    """
+    Theorem 3.7 の完全性を base 3, 5 で追加検証。
+    全 L=2,3,4 桁の数に対して例外なし。
+    """
+    for base in [3, 5]:
+        violations = 0
+        total = 0
+        for L in range(2, 5):
+            lo = base ** (L - 1)
+            hi = base ** L
+            for n in range(lo, hi):
+                total += 1
+                ps = pair_sums(n, base)
+                s = raa(n, base)
+                pal = is_palindrome(s, base)
+                case_I = all(p < base for p in ps)
+                case_II = all(p in (0, base + 1) for p in ps)
+                if pal != (case_I or case_II):
+                    violations += 1
+        test(f"Thm3.7_base{base}_exhaustive",
+             violations == 0,
+             f"{violations}/{total} violations")
 
 
 # ============================================================
@@ -494,40 +685,62 @@ def test_gamma_saturation():
 
 def main():
     global passed, failed
+
     start = time.time()
-
     print("=" * 60)
-    print("196 Carry Asymmetry Framework — Theorem Verification")
+    print("196 Carry Asymmetry — 定理検証")
     print("=" * 60)
 
-    # Section 1: Carry Asymmetry Theory
+    print("\n[Section 1] 基本 RAA 計算")
     test_basic_raa()
-    test_example_196()
-    test_theorem_C()
-    test_theorem_A()
-    test_theorem_B()
-    test_theorem_H()
 
-    # Section 2: Poison Feedback Loop
-    test_theorem_G_table()
-    test_theorem_G_trajectory()
-    test_ga_equilibrium()
-    test_theorem_D()
+    print("\n[Section 2] 定義の検証")
+    test_definitions()
 
-    # Section 4: Why Base 10 Is Singular
-    test_theorem_E()
-    test_theorem_F()
-    test_base2_lychrel()
+    print("\n[Section 3.1] Theorem 3.1 — Carry Asymmetry")
+    test_theorem_3_1()
 
-    # Section 5: Probabilistic Density Theory
-    test_stationary_distribution()
-    test_theorem_8()
+    print("\n[Section 3.1] Proposition 3.2 — c_L=0 非回文")
+    test_proposition_3_2()
 
-    # Section 6: Measured Statistics
+    print("\n[Section 3.2] Theorem 3.4 — Carry-Free Palindrome (Case I)")
+    test_theorem_3_4()
+
+    print("\n[Section 3.2] Theorem 3.5 — Pair-Sum Degeneracy (Necessity)")
+    test_theorem_3_5()
+
+    print("\n[Section 3.2] Theorem 3.6 — Pair-Sum Degeneracy (Sufficiency)")
+    test_theorem_3_6()
+
+    print("\n[Section 3.2] Theorem 3.7 — Complete Palindrome Characterization")
+    test_theorem_3_7()
+
+    print("\n[Section 3.2] Corollary 3.9 — 196 軌道 2000 ステップ")
+    test_corollary_3_9()
+
+    print("\n[Section 3.2] Remark 3.8 — Case II 実例")
+    test_remark_case_II_example()
+
+    print("\n[Section 4] Proposition 4.1 — キャリー一致確率 ρ")
+    test_proposition_4_1()
+
+    print("\n[Section 6] Proposition 6.1 — Carry Markov Chain")
+    test_proposition_6_1()
+
+    print("\n[Section 6.2] Base 2 — Sprague 接続")
+    test_base_2_sprague()
+
+    print("\n[Section 5] Wall W3 — Modular impossibility")
+    test_wall_W3()
+
+    print("\n[Statistics] 196 軌道統計")
     test_trajectory_statistics()
 
-    # Section 7: Conditional Theorem
-    test_gamma_saturation()
+    print("\n[Definitions] Generator/Absorber/Neutral 数え上げ")
+    test_generator_absorber_count()
+
+    print("\n[Multibase] Theorem 3.7 異基数完全検証")
+    test_complete_char_multibase()
 
     elapsed = time.time() - start
 
@@ -536,8 +749,14 @@ def main():
     print(f"Runtime: {elapsed:.1f}s")
     print("=" * 60)
 
-    sys.exit(0 if failed == 0 else 1)
+    if failed > 0:
+        print("\n--- Failed tests ---")
+        for name, status, detail in test_details:
+            if status == "FAIL":
+                print(f"  {name}: {detail}")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    exit(main())

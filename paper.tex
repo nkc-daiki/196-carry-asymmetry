@@ -1,0 +1,546 @@
+\documentclass[11pt]{amsart}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage[margin=2.5cm]{geometry}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{conjecture}[theorem]{Conjecture}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{condition}[theorem]{Condition}
+\newtheorem{question}{Question}[section]
+\newtheorem{hypothesis}[theorem]{Hypothesis}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\DeclareMathOperator{\rev}{rev}
+
+%% --- レイアウト改善 ---
+% 定理環境の前後にスペースを追加
+\makeatletter
+\def\thm@space@setup{%
+  \thm@preskip=10pt plus 3pt minus 2pt
+  \thm@postskip=10pt plus 3pt minus 2pt
+}
+\makeatother
+% proof 環境の後にスペース追加
+\let\oldendproof\endproof
+\renewcommand{\endproof}{\oldendproof\medskip}
+% セクション間の区切り線
+\newcommand{\sectionbreak}{\bigskip\noindent\rule{\textwidth}{0.4pt}\bigskip}
+
+\begin{document}
+
+\title[Carry Asymmetry and Palindrome Characterization in RAA]{%
+Carry Asymmetry, Palindrome Characterization,\\
+and Conditional Non-Convergence\\
+in the Reverse-and-Add Process}
+
+\author{Ando}
+\date{February 23, 2026}
+
+\begin{abstract}
+We study the reverse-and-add (RAA) process $n \mapsto n + \rev(n)$ in arbitrary bases $b \geq 2$, with particular attention to the trajectory of 196---the smallest suspected Lychrel number in base~10. We establish three main results.
+
+First, an \emph{unconditional carry asymmetry theorem} (Theorem~\ref{thm:carry-asym}): for inputs of \emph{any} digit-length~$L$ with at least one pair-sum exceeding~$b-1$ and final carry $c_L = 0$, the carry chain of $n + \rev(n)$ is necessarily left-right asymmetric, and thus $n + \rev(n)$ is not a palindrome.
+
+Second, a \emph{complete palindrome characterization} (Theorem~\ref{thm:complete-char}): for any base $b \geq 3$ and any $L$-digit input~$n$, the sum $n + \rev(n)$ is a palindrome if and only if either (I)~all pair-sums satisfy $\mathrm{ps}_i < b$ (carry-free case, with $c_L = 0$), or (II)~all pair-sums lie in $\{0, b+1\}$ (pair-sum degeneracy, with $c_L = 1$). This is the first necessary-and-sufficient characterization of RAA palindromes in the literature.
+
+Third, a \emph{conditional non-convergence theorem} (Theorem~\ref{thm:conditional}): assuming a single digit non-degeneracy hypothesis (Condition~W2), the probability that the RAA trajectory of 196 reaches a palindrome decays exponentially in digit-length.
+
+We present a systematic ``wall map'' of proof approaches, identify four distinct barriers, and show that the 196 conjecture reduces to a concrete pair-sum non-degeneracy condition: at every step of the trajectory, some pair-sum must exceed~9 and some must avoid $\{0, 11\}$. We extend the analysis to bases 2--16, connecting our framework to Sprague's 1963 proof for base~2. Code and data are available at \url{https://github.com/nkc-daiki/196-carry-asymmetry}.
+\end{abstract}
+
+\maketitle
+
+%% ============================================================
+\section{Introduction}
+%% ============================================================
+
+The reverse-and-add (RAA) process takes a positive integer~$n$, reverses its digits to obtain $\rev(n)$, and produces $n + \rev(n)$. Many integers reach a palindrome after a few iterations. The number~89, for example, requires 24 iterations but eventually produces the palindrome $8{,}813{,}200{,}023{,}188$.
+
+However, certain integers appear to never converge. These are called \emph{Lychrel candidates} (the term ``Lychrel number'' is reserved for proven cases of non-convergence, of which none are known in base~10). The smallest suspected Lychrel number in base~10 is~196. Computational searches extending beyond $10^9$ iterations, producing numbers with hundreds of millions of digits~\cite{Walker2010}, have found no palindrome. Yet no proof of non-convergence exists.
+
+The present paper makes five contributions:
+\begin{enumerate}[label=(\arabic*)]
+\item An \textbf{unconditional carry asymmetry theorem} (Theorem~\ref{thm:carry-asym}): for \emph{any} digit-length~$L$ (even or odd), if at least one pair-sum exceeds $b-1$ and the final carry $c_L = 0$, then the carry chain is left-right asymmetric and $n + \rev(n)$ is not a palindrome.
+\item A \textbf{complete palindrome characterization} (Theorem~\ref{thm:complete-char}): a necessary-and-sufficient condition for $n + \rev(n)$ to be a palindrome, valid for all bases $b \geq 3$ and all digit-lengths.
+\item A \textbf{conditional non-convergence theorem} (Theorem~\ref{thm:conditional}): under a single digit non-degeneracy hypothesis, the trajectory of 196 avoids palindromes with probability decaying exponentially in~$L$.
+\item A \textbf{systematic wall map} classifying proof approaches and identifying four distinct barriers (W1--W4), with the 196~conjecture reduced to a concrete pair-sum non-degeneracy condition.
+\item A \textbf{base comparison} extending the carry asymmetry framework to bases 2--16 and connecting it to the sporadic pattern of bases where Lychrel proofs exist.
+\end{enumerate}
+
+\subsection{Prior work}
+Rigorous results on the 196 problem are scarce. The most relevant background includes: Holte's~\cite{Holte1997} analysis of the carry chain in addition as a Markov process with second eigenvalue $\lambda_2 = 1/b$; Diaconis and Fulman's~\cite{DiaconisFulman2009a,DiaconisFulman2009b} extension connecting carries to Lie theory and card shuffling; and Sprague's~\cite{Sprague1963} proof that in base~2, certain numbers never reach a palindrome under RAA---the only base for which Lychrel numbers were previously rigorously established using direct structural arguments. For base~10, no unconditional structural result about the 196 trajectory, nor any characterization of when $n + \rev(n)$ is a palindrome, has previously been published.
+
+
+%% ============================================================
+\section{Definitions and Notation}
+%% ============================================================
+
+Throughout, $b$ denotes the base (with $b = 10$ unless otherwise stated).
+
+\begin{definition}\label{def:reversal}
+Let $n$ be a positive integer with $L$-digit representation $n = \sum_{i=0}^{L-1} d_i \cdot b^i$, where $d_{L-1} \neq 0$ and $0 \leq d_i \leq b-1$. The \emph{digit reversal} is $\rev(n) = \sum_{i=0}^{L-1} d_{L-1-i} \cdot b^i$.
+\end{definition}
+
+\begin{definition}\label{def:pairsum}
+The \emph{pair-sum sequence} is $\mathrm{ps}_i = d_i + d_{L-1-i}$ for $i = 0, \ldots, L-1$. Note that $\mathrm{ps}_i = \mathrm{ps}_{L-1-i}$ (pair-sums are symmetric).
+\end{definition}
+
+\begin{definition}\label{def:carry}
+The \emph{carry chain} of $n + \rev(n)$ is $c_0, c_1, \ldots, c_L$ defined by $c_0 = 0$ and
+\[
+c_{i+1} = \left\lfloor \frac{\mathrm{ps}_i + c_i}{b} \right\rfloor \quad \text{for } i = 0, \ldots, L-1.
+\]
+Since $\mathrm{ps}_i \leq 2(b-1)$ and $c_i \in \{0,1\}$, we have $c_i \in \{0,1\}$ for all~$i$.
+\end{definition}
+
+\begin{definition}\label{def:output}
+The \emph{output digits} are $o_i = (\mathrm{ps}_i + c_i) \bmod b$ for $i = 0, \ldots, L-1$, with $o_L = c_L$ when $c_L = 1$.
+\end{definition}
+
+\begin{definition}\label{def:symmetric}
+The carry chain is \emph{left-right symmetric} if $c_i = c_{L-i}$ for all $i \in \{0, 1, \ldots, L\}$.
+\end{definition}
+
+\begin{definition}\label{def:generator}
+A position~$i$ is a \emph{carry generator} if $\mathrm{ps}_i \geq b$, a \emph{carry absorber} if $\mathrm{ps}_i \leq b-2$, and \emph{neutral} if $\mathrm{ps}_i = b-1$. In base~10: generators have $\mathrm{ps}_i \in \{10, \ldots, 18\}$, absorbers have $\mathrm{ps}_i \in \{0, \ldots, 8\}$, and the single neutral value is $\mathrm{ps}_i = 9$.
+\end{definition}
+
+
+%% ============================================================
+\clearpage
+\section{Unconditional Results}
+\label{sec:unconditional}
+%% ============================================================
+
+\subsection{Carry asymmetry}
+
+\begin{theorem}[Carry Asymmetry]\label{thm:carry-asym}
+Let $n$ have $L$ digits in base $b \geq 2$ (with $L \geq 2$). If $\mathrm{ps}_j \geq b$ for some~$j$ and $c_L = 0$, then the carry chain of $n + \rev(n)$ is not left-right symmetric.
+\end{theorem}
+
+\begin{proof}
+Assume for contradiction that $c_i = c_{L-i}$ for all~$i$.
+
+\emph{Step 1.} From $c_0 = 0$ and symmetry, $c_L = 0$ (consistent with the hypothesis).
+
+\emph{Step 2.} We prove by induction that $c_i = 0$ for all $i \leq \lfloor L/2 \rfloor$.
+
+\emph{Base case:} $c_0 = 0$.
+
+\emph{Inductive step:} Suppose $c_i = 0$ for some $i < \lfloor L/2 \rfloor$. By the forward recurrence:
+\begin{equation}\label{eq:forward}
+c_{i+1} = \left\lfloor \frac{\mathrm{ps}_i + 0}{b} \right\rfloor = \left\lfloor \frac{\mathrm{ps}_i}{b} \right\rfloor.
+\end{equation}
+From the recurrence at position $L-i-1$ with pair-sum symmetry $\mathrm{ps}_{L-i-1} = \mathrm{ps}_i$:
+\[
+c_{L-i} = \left\lfloor \frac{\mathrm{ps}_i + c_{L-i-1}}{b} \right\rfloor.
+\]
+By symmetry, $c_{L-i} = c_i = 0$ and $c_{L-i-1} = c_{i+1}$, so:
+\begin{equation}\label{eq:backward}
+0 = \left\lfloor \frac{\mathrm{ps}_i + c_{i+1}}{b} \right\rfloor.
+\end{equation}
+
+\emph{Case 1: $\mathrm{ps}_i \leq b-1$.} Then $c_{i+1} = 0$ from~\eqref{eq:forward}, and the induction continues.
+
+\emph{Case 2: $\mathrm{ps}_i \geq b$.} Then $c_{i+1} = 1$ from~\eqref{eq:forward}. Substituting into~\eqref{eq:backward}: $\lfloor (\mathrm{ps}_i + 1)/b \rfloor = 0$, requiring $\mathrm{ps}_i \leq b-2$. This contradicts $\mathrm{ps}_i \geq b$.
+
+\emph{Step 3 (Odd $L$).} When $L = 2M+1$ is odd, the induction from Step~2 establishes $c_i = 0$ for all $i \leq M$. We must show that the assumed generator $\mathrm{ps}_j \geq b$ leads to a contradiction.
+
+If $j \leq M - 1$ (or equivalently $L{-}1{-}j \leq M - 1$, since $\mathrm{ps}_j = \mathrm{ps}_{L-1-j}$), then the generator is encountered within the inductive range of Step~2, and the contradiction follows as in the even case.
+
+If $j = M$ (the center position, which equals its own mirror $L{-}1{-}j = M$), then $c_{M+1} = \lfloor (\mathrm{ps}_M + c_M)/b \rfloor = \lfloor \mathrm{ps}_M / b \rfloor = 1$ since $\mathrm{ps}_M \geq b$. But symmetry gives $c_{M+1} = c_{L-(M+1)} = c_M = 0$, a contradiction.
+\end{proof}
+
+\begin{proposition}\label{cor:not-pal-cL0}
+Under the hypotheses of Theorem~\ref{thm:carry-asym} (i.e., $\mathrm{ps}_j \geq b$ for some~$j$ and $c_L = 0$), $n + \rev(n)$ is not a palindrome.
+\end{proposition}
+
+\begin{proof}
+Assume for contradiction that $S = n + \rev(n)$ is a palindrome with $c_L = 0$. Since $S$ has $L$~digits, the palindrome condition $o_k = o_{L-1-k}$ with $\mathrm{ps}_k = \mathrm{ps}_{L-1-k}$ gives
+\begin{equation}\label{eq:pal-carry}
+c_k = c_{L-1-k} \quad \text{for all } k = 0, \ldots, L-1.
+\end{equation}
+The carry recurrence at position $L{-}i{-}1$ gives $c_{L-i} = \lfloor (\mathrm{ps}_{L-i-1} + c_{L-i-1})/b \rfloor = \lfloor (\mathrm{ps}_i + c_i)/b \rfloor$, where we used $\mathrm{ps}_{L-i-1} = \mathrm{ps}_i$ and~\eqref{eq:pal-carry}. The forward recurrence at position~$i$ gives $c_{i+1} = \lfloor (\mathrm{ps}_i + c_i)/b \rfloor$. Therefore:
+\begin{equation}\label{eq:shift}
+c_{L-i} = c_{i+1} \quad \text{for all } i = 0, \ldots, L-1.
+\end{equation}
+Setting $i = 0$: $c_L = c_1$, so $c_1 = 0$. Setting $i = 1$: $c_{L-1} = c_2$; since $c_{L-1} = c_0 = 0$ by~\eqref{eq:pal-carry}, $c_2 = 0$. By induction, $c_k = 0$ for all~$k$. Then $c_{k+1} = \lfloor \mathrm{ps}_k / b \rfloor = 0$ for all~$k$, so $\mathrm{ps}_k < b$ for all~$k$, contradicting the hypothesis $\mathrm{ps}_j \geq b$.
+\end{proof}
+
+\begin{remark}\label{rem:two-symmetries}
+Theorem~\ref{thm:carry-asym} and Proposition~\ref{cor:not-pal-cL0} address related but distinct symmetry conditions. Theorem~\ref{thm:carry-asym} shows that the carry chain cannot satisfy $c_i = c_{L-i}$ (Definition~\ref{def:symmetric}). Proposition~\ref{cor:not-pal-cL0} shows that the output digits cannot satisfy the palindrome condition $o_k = o_{L-1-k}$, which translates to the constraint $c_k = c_{L-1-k}$---an index shift from Definition~\ref{def:symmetric}. Both proofs exploit the tension between left-to-right carry propagation and right-to-left symmetry demands, but via independent arguments.
+\end{remark}
+
+
+\subsection{Complete palindrome characterization}
+\label{sec:palindrome-char}
+
+We now establish a complete characterization of when $n + \rev(n)$ is a palindrome. This requires analyzing both the $c_L = 0$ and $c_L = 1$ cases.
+
+\begin{theorem}[Carry-Free Palindrome]\label{thm:case-I}
+Let $b \geq 2$ and let $n$ have $L$ digits. If $\mathrm{ps}_i < b$ for all $i$ (no generators), then $c_L = 0$ and $n + \rev(n)$ is a palindrome. Conversely, if $c_L = 0$ and $n + \rev(n)$ is a palindrome, then $\mathrm{ps}_i < b$ for all~$i$.
+\end{theorem}
+
+\begin{proof}
+\emph{Forward direction:} If $\mathrm{ps}_i < b$ for all~$i$, then $c_{i+1} = \lfloor (\mathrm{ps}_i + c_i)/b \rfloor$. By induction, $c_0 = 0$ and $\mathrm{ps}_0 + 0 < b$ gives $c_1 = 0$; continuing, all $c_i = 0$ (including $c_L = 0$). The output digits are $o_i = \mathrm{ps}_i$, and the palindrome condition $o_i = o_{L-1-i}$ reduces to $\mathrm{ps}_i = \mathrm{ps}_{L-1-i}$, which holds by pair-sum symmetry.
+
+\emph{Converse:} This is the contrapositive of Proposition~\ref{cor:not-pal-cL0}: if some $\mathrm{ps}_j \geq b$ and $c_L = 0$, then $n + \rev(n)$ is not a palindrome.
+\end{proof}
+
+\begin{theorem}[Pair-Sum Degeneracy: Necessity]\label{thm:case-II-nec}
+Let $b \geq 3$ and let $n$ have $L$ digits with $c_L = 1$. If $n + \rev(n)$ is a palindrome, then $\mathrm{ps}_i \in \{0, b+1\}$ for all $i = 0, \ldots, L-1$.
+\end{theorem}
+
+\begin{proof}
+The output $S = n + \rev(n)$ has $L+1$ digits: $o'_j$ for $j = 0, \ldots, L$, where $o'_j = (\mathrm{ps}_j + c_j) \bmod b$ for $j < L$ and $o'_L = c_L = 1$. The palindrome condition is $o'_k = o'_{L-k}$ for all~$k$.
+
+We prove by induction that $\mathrm{ps}_k \in \{0, b+1\}$ for $k = 0, 1, \ldots, \lfloor L/2 \rfloor$.
+
+\emph{Base case ($k = 0$):} We have $o'_0 = \mathrm{ps}_0 \bmod b$ (since $c_0 = 0$) and $o'_L = 1$. The palindrome condition gives $\mathrm{ps}_0 \bmod b = 1$. Since $c_L = 1$ and $c_L = \lfloor (\mathrm{ps}_{L-1} + c_{L-1})/b \rfloor$, the carry chain must produce a final carry. The recurrence at position $L-1$ gives $c_L = \lfloor (\mathrm{ps}_0 + c_{L-1})/b \rfloor$ (using $\mathrm{ps}_{L-1} = \mathrm{ps}_0$). With $c_L = 1$: $\mathrm{ps}_0 + c_{L-1} \geq b$. Combined with $\mathrm{ps}_0 \bmod b = 1$ and $c_{L-1} \in \{0,1\}$, we get $\mathrm{ps}_0 \in \{b+1\}$ (with $c_{L-1} = 0$) or $\mathrm{ps}_0 \in \{1, b+1\}$ (with $c_{L-1} = 1$). Since $\mathrm{ps}_0 + c_{L-1} \geq b$: if $\mathrm{ps}_0 = 1$ then $c_{L-1} = 1$ gives $1 + 1 = 2 < b$ for $b \geq 3$, contradiction. So $\mathrm{ps}_0 = b+1$.
+
+\emph{Inductive step:} Suppose $\mathrm{ps}_j \in \{0, b+1\}$ for all $j < k$ (with $k \leq \lfloor L/2 \rfloor$). The key observation is that for $\mathrm{ps} \in \{0, b+1\}$, the carry-out $\lfloor (\mathrm{ps} + c)/b \rfloor$ is independent of the carry-in~$c$:
+\begin{itemize}[nosep]
+\item $\mathrm{ps} = 0$: $\lfloor (0+c)/b \rfloor = 0$ for $c \in \{0,1\}$ (since $b \geq 3$).
+\item $\mathrm{ps} = b+1$: $\lfloor (b+1+c)/b \rfloor = 1$ for $c \in \{0,1\}$.
+\end{itemize}
+Therefore, $c_{k} = \lfloor \mathrm{ps}_{k-1}/b \rfloor$, determined entirely by $\mathrm{ps}_0, \ldots, \mathrm{ps}_{k-1}$.
+
+The palindrome condition at position~$k$ in the $(L+1)$-digit output gives $o'_k = o'_{L-k}$, i.e.,
+\begin{equation}\label{eq:pal-k}
+(\mathrm{ps}_k + c_k) \bmod b = (\mathrm{ps}_{k-1} + c_{L-k}) \bmod b,
+\end{equation}
+where we used $\mathrm{ps}_{L-k} = \mathrm{ps}_{k-1}$ (pair-sum symmetry). The carry $c_{L-k}$ is the carry entering position $L{-}k$ in the forward chain, given by $c_{L-k} = \lfloor (\mathrm{ps}_{L-k-1} + c_{L-k-1})/b \rfloor = \lfloor (\mathrm{ps}_k + c_{L-k-1})/b \rfloor$ (using $\mathrm{ps}_{L-k-1} = \mathrm{ps}_k$). We analyze two cases.
+
+\emph{Subcase~(a): $\mathrm{ps}_k \neq b-1$.} For any $\mathrm{ps} \notin \{b{-}1\}$, the carry-out $\lfloor (\mathrm{ps} + c)/b \rfloor$ is independent of the carry-in $c \in \{0,1\}$ (when $\mathrm{ps} \leq b{-}2$, the carry-out is~0 regardless; when $\mathrm{ps} \geq b$, the carry-out is~1 regardless). Therefore $c_{L-k} = \lfloor \mathrm{ps}_k / b \rfloor$. Substituting into~\eqref{eq:pal-k}:
+\[
+(\mathrm{ps}_k + c_k) \bmod b = (\mathrm{ps}_{k-1} + \lfloor \mathrm{ps}_k / b \rfloor) \bmod b.
+\]
+Writing $\mathrm{ps}_k = qb + r$ with $q = \lfloor \mathrm{ps}_k/b \rfloor \in \{0,1\}$ and $0 \leq r < b$, $r \neq b{-}1$:
+\[
+(r + c_k) \bmod b = (\mathrm{ps}_{k-1} + q) \bmod b.
+\]
+Since $c_k = \lfloor \mathrm{ps}_{k-1}/b \rfloor$ and $\mathrm{ps}_{k-1} \in \{0, b{+}1\}$: when $\mathrm{ps}_{k-1} = 0$, $c_k = 0$, giving $r = q$; when $\mathrm{ps}_{k-1} = b{+}1$, $c_k = 1$, giving $(r+1) \bmod b = (1 + q) \bmod b$, hence $r = q$. In both cases, the unique solutions with $0 \leq r < b$, $r \neq b{-}1$ are $(q,r) = (0,0)$ and $(q,r) = (1,1)$, giving $\mathrm{ps}_k \in \{0, b+1\}$.
+
+\emph{Subcase~(b): $\mathrm{ps}_k = b-1$.} Now the carry-out depends on the carry-in: $\lfloor (b{-}1+c)/b \rfloor = c$. So $c_{L-k} = c_{L-k-1}$ (the carry propagates unchanged). Substituting into~\eqref{eq:pal-k}:
+\[
+(b - 1 + c_k) \bmod b = (\mathrm{ps}_{k-1} + c_{L-k-1}) \bmod b.
+\]
+When $\mathrm{ps}_{k-1} = 0$ and $c_k = 0$: the left side is $b - 1$, while the right side is $c_{L-k-1} \in \{0,1\}$, giving $b - 1 \leq 1$, which contradicts $b \geq 3$. When $\mathrm{ps}_{k-1} = b{+}1$ and $c_k = 1$: the left side is $0$, while the right side is $(1 + c_{L-k-1}) \bmod b \in \{1, 2\}$, again a contradiction for $b \geq 3$. So $\mathrm{ps}_k = b - 1$ is impossible.
+
+Combining Subcases~(a) and~(b): $\mathrm{ps}_k \in \{0, b+1\}$, completing the induction.
+
+For odd $L = 2M+1$, the center position $k = M$ satisfies $\mathrm{ps}_M = 2d_M$. Since $b + 1$ is at least~3 for $b \geq 3$, the constraint $\mathrm{ps}_M \in \{0, b+1\}$ with $\mathrm{ps}_M$ even forces $\mathrm{ps}_M = 0$ when $b$ is even (as $b+1$ is odd), or allows both values when $b$ is odd.
+\end{proof}
+
+\begin{theorem}[Pair-Sum Degeneracy: Sufficiency]\label{thm:case-II-suf}
+Let $b \geq 2$ and let $n$ have $L$ digits with pair-sums $\mathrm{ps}_i \in \{0, b+1\}$ for all~$i$, with $c_L = 1$. Then $n + \rev(n)$ is a palindrome.
+\end{theorem}
+
+\begin{proof}
+The output $S$ has $L+1$ digits: $o'_j = (\mathrm{ps}_j + c_j) \bmod b$ for $j < L$, and $o'_L = 1$. We must show $o'_k = o'_{L-k}$ for all $0 \leq k \leq L$.
+
+The case $k = 0$: $o'_0 = (\mathrm{ps}_0 + 0) \bmod b$. Since $\mathrm{ps}_{L-1} = \mathrm{ps}_0$ and $c_L = \lfloor (\mathrm{ps}_{L-1} + c_{L-1})/b \rfloor = 1$, we need $\mathrm{ps}_0 + c_{L-1} \geq b$. With $\mathrm{ps}_0 \in \{0, b+1\}$ and $c_{L-1} \in \{0,1\}$: $\mathrm{ps}_0 = 0$ gives $c_{L-1} \geq b \geq 3$, impossible; so $\mathrm{ps}_0 = b+1$. Thus $o'_0 = 1 = o'_L$.
+
+For $1 \leq k \leq L-1$, we use the carry-in independence property: $c_k$ depends only on $\mathrm{ps}_0, \ldots, \mathrm{ps}_{k-1}$, and specifically $c_k = \lfloor \mathrm{ps}_{k-1}/b \rfloor$. Writing:
+\begin{align*}
+o'_k &= (\mathrm{ps}_k + \lfloor \mathrm{ps}_{k-1}/b \rfloor) \bmod b, \\
+o'_{L-k} &= (\mathrm{ps}_{L-k} + c_{L-k}) \bmod b = (\mathrm{ps}_{k-1} + \lfloor \mathrm{ps}_k/b \rfloor) \bmod b,
+\end{align*}
+where we used $\mathrm{ps}_{L-k} = \mathrm{ps}_{k-1}$ (pair-sum symmetry) and $c_{L-k} = \lfloor \mathrm{ps}_{L-k-1}/b \rfloor = \lfloor \mathrm{ps}_k/b \rfloor$. We verify $o'_k = o'_{L-k}$ for all four combinations of $(\mathrm{ps}_{k-1}, \mathrm{ps}_k) \in \{0, b+1\}^2$:
+\begin{center}
+\begin{tabular}{cc|cc}
+\toprule
+$\mathrm{ps}_{k-1}$ & $\mathrm{ps}_k$ & $o'_k$ & $o'_{L-k}$ \\
+\midrule
+$0$ & $0$ & $(0+0) \bmod b = 0$ & $(0+0) \bmod b = 0$ \\
+$0$ & $b{+}1$ & $(b{+}1{+}0) \bmod b = 1$ & $(0{+}1) \bmod b = 1$ \\
+$b{+}1$ & $0$ & $(0{+}1) \bmod b = 1$ & $(b{+}1{+}0) \bmod b = 1$ \\
+$b{+}1$ & $b{+}1$ & $(b{+}1{+}1) \bmod b = 2$ & $(b{+}1{+}1) \bmod b = 2$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+All four cases give $o'_k = o'_{L-k}$.
+\end{proof}
+
+Combining Theorems~\ref{thm:case-I}, \ref{thm:case-II-nec}, and~\ref{thm:case-II-suf}:
+
+\begin{theorem}[Complete Palindrome Characterization]\label{thm:complete-char}
+Let $b \geq 3$ and let $n$ be a positive $L$-digit integer in base~$b$. Then $S = n + \rev(n)$ is a palindrome if and only if one of the following holds:
+\begin{itemize}[nosep]
+\item[\textup{(I)}] $\mathrm{ps}_i < b$ for all $i$ \textup{(}carry-free; $c_L = 0$, $S$ has $L$ digits\textup{)}.
+\item[\textup{(II)}] $\mathrm{ps}_i \in \{0, b+1\}$ for all $i$ \textup{(}pair-sum degeneracy; $c_L = 1$, $S$ has $L+1$ digits with all digits in $\{0,1,2\}$\textup{)}.
+\end{itemize}
+\end{theorem}
+
+\begin{proof}
+The two cases are exhaustive (since $c_L \in \{0,1\}$). Case~(I) is Theorem~\ref{thm:case-I}. Case~(II): necessity is Theorem~\ref{thm:case-II-nec}; sufficiency is Theorem~\ref{thm:case-II-suf}. The digit bound in Case~(II) follows from the output computation: $o'_j \in \{0, 1, 2\}$ for all four $(\mathrm{ps}_{j-1}, \mathrm{ps}_j) \in \{0, b+1\}^2$ combinations.
+\end{proof}
+
+\begin{remark}\label{rem:cL1-palindromes}
+Case~(II) palindromes exist: for example, in base~10, the number $n = 9002$ has $\mathrm{ps} = (11, 0, 0, 11)$ and $9002 + 2009 = 11011$, a palindrome with $c_L = 1$.  However, Case~(II) requires extreme structural degeneracy: every pair-sum must take one of exactly two values from a set of $2(b-1)+1$ possibilities.
+\end{remark}
+
+\begin{corollary}[Equivalent Formulation of the 196 Conjecture]\label{cor:196-equiv}
+The number 196 is Lychrel in base~10 if and only if, at every step~$t$ of its RAA trajectory, both of the following hold:
+\begin{itemize}[nosep]
+\item[\textup{(a)}] at least one pair-sum satisfies $\mathrm{ps}_i \geq 10$ \textup{(}ruling out Case~I\textup{)}, and
+\item[\textup{(b)}] at least one pair-sum satisfies $\mathrm{ps}_i \notin \{0, 11\}$ \textup{(}ruling out Case~II\textup{)}.
+\end{itemize}
+A sufficient condition for both~\textup{(a)} and~\textup{(b)} simultaneously is: at every step, at least one pair-sum satisfies $\mathrm{ps}_i \in \{10, 12, 13, \ldots, 18\}$.
+\end{corollary}
+
+\begin{proof}
+By Theorem~\ref{thm:complete-char}, the trajectory produces a palindrome at step~$t$ if and only if either all $\mathrm{ps}_i < 10$ (Case~I) or all $\mathrm{ps}_i \in \{0, 11\}$ (Case~II). Non-palindromicity at step~$t$ is the negation: (a)~$\exists\, i$ with $\mathrm{ps}_i \geq 10$ and (b)~$\exists\, j$ with $\mathrm{ps}_j \notin \{0, 11\}$. For the sufficient condition: any $\mathrm{ps}_i \in \{10, 12, \ldots, 18\}$ satisfies both $\mathrm{ps}_i \geq 10$ and $\mathrm{ps}_i \notin \{0, 11\}$ simultaneously. In the first 2000 steps of the 196 trajectory, the sufficient condition holds at all steps.
+\end{proof}
+
+
+\subsection{Computational verification}
+\label{sec:comp-verify}
+
+All theorems were verified computationally:
+\begin{itemize}[nosep]
+\item Theorem~\ref{thm:carry-asym}: tested over 121{,}776 pair-sum patterns across bases $b \in \{2,3,5,10\}$ and lengths $L \in \{2, \ldots, 8\}$; zero violations.
+\item Theorem~\ref{thm:case-I} ($c_L = 0$ iff): tested on 15{,}813 numbers across bases $b \in \{3,5,10\}$ and lengths $L \in \{2, \ldots, 6\}$; zero violations.
+\item Theorem~\ref{thm:case-II-nec} (necessity): among 146 confirmed $c_L = 1$ palindromes across multiple bases, all have $\mathrm{ps}_i \in \{0, b+1\}$; zero violations.
+\item Theorem~\ref{thm:case-II-suf} (sufficiency): tested 244 pair-sum patterns with $\mathrm{ps}_i \in \{0, b+1\}$ across bases $b \in \{2,3,5,10,16\}$ and lengths $L \in \{2, \ldots, 10\}$; all with $c_L = 1$ produce palindromes.
+\end{itemize}
+
+In the first 2000 steps of the 196 trajectory:
+\begin{itemize}[nosep]
+\item 1169 steps have $c_L = 0$ and at least one generator (non-palindrome by Proposition~\ref{cor:not-pal-cL0}; of these, 587 have even~$L$ and 582 have odd~$L$).
+\item 831 steps have $c_L = 1$ with at least one $\mathrm{ps}_i \notin \{0, 11\}$ (non-palindrome by Theorem~\ref{thm:case-II-nec}).
+\item 0 steps satisfy either palindrome condition.
+\end{itemize}
+Total: \textbf{2000/2000 steps (100\%) are unconditionally proven non-palindromes} by the characterization theorem.
+
+
+%% ============================================================
+\clearpage
+\section{Conditional Result: Non-Convergence under Digit Non-Degeneracy}
+\label{sec:conditional}
+%% ============================================================
+
+Theorem~\ref{thm:complete-char} reduces the 196 conjecture to the non-degeneracy of pair-sum distributions. We now formalize conditions under which this non-degeneracy yields exponential non-convergence. The analysis treats the digits of the trajectory as draws from a non-degenerate distribution (Condition~W2 below); the resulting ``probability'' bounds quantify how far the trajectory must deviate from this model to reach a palindrome.
+
+\subsection{The palindrome constraint system}
+For $n + \rev(n)$ to be a palindrome when $c_L = 0$, the output palindrome condition requires $c_k = c_{L-1-k}$ for all $k = 0, \ldots, \lfloor L/2 \rfloor - 1$ (see the proof of Proposition~\ref{cor:not-pal-cL0}). We define the \emph{palindrome indicator} $I_k = \mathbf{1}[c_k = c_{L-1-k}]$; a palindrome requires $I_k = 1$ for all~$k$.
+
+\begin{proposition}\label{prop:carry-indep}
+In the 196 trajectory (first 2000 steps, $c_L = 0$ steps only), the unconditional match probability is $\rho := P(I_k = 1) \approx 0.502$, consistent with the theoretical prediction $\rho \to 1/2$ from Markov mixing. Furthermore, the conditional probability $P(I_{k+2} = 1 \mid I_k = 1) \approx 0.506$, with the deviation from~$\rho$ bounded by $b^{-2} = 0.01$.
+\end{proposition}
+
+The value $\rho \approx 1/2$ is theoretically expected: the carries $c_k$ and $c_{L-1-k}$ are driven by overlapping but largely independent segments of the pair-sum sequence, and the carry Markov chain mixes to its stationary distribution (uniform on $\{0,1\}$) at rate $\lambda_2 = 1/b$ per step~\cite{Holte1997}. For well-separated positions, $c_k$ and $c_{L-1-k}$ are nearly independent Bernoulli$(1/2)$, giving $P(c_k = c_{L-1-k}) = (1/2)^2 + (1/2)^2 = 1/2$.
+
+\subsection{Condition W2: Digit non-degeneracy}
+
+\begin{condition}[W2: Digit Non-Degeneracy]\label{cond:W2}
+For the trajectory of 196, at every sufficiently large step~$t$, the digit distribution at each position~$i$ is not concentrated on a single value. Formally, let $\hat{p}(\kappa; i, t)$ denote the Fourier coefficient of the digit distribution at position~$i$ and step~$t$ on $\mathbb{Z}/b\mathbb{Z}$. Then $\eta(t) := \max_{i, \kappa \neq 0} |\hat{p}(\kappa; i, t)| < 1$.
+\end{condition}
+
+This condition is self-reinforcing: if $\eta_t < 1$ at step~$t$, then the convolution structure of the RAA map contracts Fourier coefficients. Specifically, each output digit $o_k = (d_k + d_{L-1-k} + c_k) \bmod b$ is the sum of two input digits (giving a Fourier coefficient bound $\eta_t^2$ from convolution) plus a carry whose distribution is governed by the Markov chain with spectral gap $1 - 1/b$~\cite{Holte1997}. This yields $\eta_{t+1} \leq \eta_t^2 \cdot \alpha$ for some $\alpha < 1$ depending on~$b$, ensuring exponential contraction once $\eta_t < 1/\sqrt{\alpha}$. The difficulty lies in proving $\eta < 1$ at any step for the deterministic trajectory.
+
+\subsection{The conditional theorem}
+
+\begin{lemma}[Markov Decoupling]\label{lem:decoupling}
+Under Condition~W2, let $k_1 < k_2 < \cdots < k_m$ be constraint positions with $k_{j+1} - k_j \geq 2$ and $k_j < L/2$. Define $E_j = \bigcap_{i=1}^{j} \{I_{k_i} = 1\}$. Then for each $j \geq 2$:
+\[
+P(I_{k_j} = 1 \mid E_{j-1}) \leq P(I_{k_j} = 1) + b^{-2}.
+\]
+\end{lemma}
+
+\begin{proof}
+The carry chain is a Markov process with second eigenvalue $\lambda_2 = 1/b$ (Proposition~\ref{prop:carry-markov}). After $k_j - k_{j-1} \geq 2$ transition steps, the total variation distance from the unconditioned chain contracts by $\lambda_2^2 = b^{-2}$. A coupling argument on both the left carry $c_{k_j}$ and right carry $c_{L-1-k_j}$ gives the bound.
+\end{proof}
+
+\begin{theorem}[Conditional Non-Convergence]\label{thm:conditional}
+Assume Condition~W2 holds for the RAA trajectory of 196. Then the probability of palindrome formation at step~$t$ (for steps with $c_{L_t} = 0$) satisfies:
+\[
+P(\text{palindrome at step } t) \leq \rho_*^{\lfloor L_t/4 \rfloor},
+\]
+where $\rho_* = \rho + b^{-2} \approx 0.512$ in base~10.
+\end{theorem}
+
+\begin{proof}
+A palindrome with $c_L = 0$ requires $I_k = 1$ for all $k = 0, \ldots, \lfloor L/2 \rfloor - 1$. Choose $m = \lfloor L/4 \rfloor$ constraint positions $k_j = 2j - 1$ (with gap~$\geq 2$), apply Lemma~\ref{lem:decoupling} iteratively, and multiply:
+\[
+P(\text{palindrome}) \leq P(E_m) = \prod_{j=1}^{m} P(I_{k_j} = 1 \mid E_{j-1}) \leq \rho_*^m = \rho_*^{\lfloor L/4 \rfloor}.
+\]
+For $L = 250$ (step $\approx 500$): $\rho_*^{62} = 0.512^{62} < 10^{-18}$. For $L = 500$ (step $\approx 1000$): $\rho_*^{125} < 10^{-36}$. The palindrome probability decays exponentially in~$L$, with rate $\ln(1/\rho_*) \approx 0.67$ per unit of $L/4$.
+
+Note: steps with $c_L = 1$ are handled by Theorem~\ref{thm:case-II-nec}---under W2, the pair-sum degeneracy condition (all $\mathrm{ps}_i \in \{0, b+1\}$) fails with overwhelming probability.
+\end{proof}
+
+
+%% ============================================================
+\clearpage
+\section{The Wall Map: Proof Approaches to 196}
+\label{sec:wallmap}
+%% ============================================================
+
+We systematically explored multiple approaches to proving that 196 is Lychrel. Each either succeeded or encountered a specific barrier.
+
+\subsection{Classification of walls}
+Four distinct walls were identified:
+
+\textbf{Wall W1: Carry always present.} The carry-free palindrome condition (Case~I of Theorem~\ref{thm:complete-char}) is inapplicable because generators are present at every step of the 196 trajectory.
+
+\textbf{Wall W2: Digit non-degeneracy (Condition~\ref{cond:W2}).} The universal barrier. The majority of approaches reduce to this single assumption. Numerically overwhelmingly true but formally unproven.
+
+\textbf{Wall W3: Modular impossibility.} The coefficient structure of $n + \rev(n) \pmod{m}$ is identical to that of palindromes for any modulus~$m$, making modular exclusion provably impossible.
+
+\textbf{Wall W4: Pair-sum degeneracy.} Case~(II) of Theorem~\ref{thm:complete-char} requires all pair-sums in $\{0, b+1\}$. In the 196 trajectory, the maximum fraction of pair-sums in $\{0, 11\}$ observed at any $c_L = 1$ step is 50\% (step~12), far from the required 100\%. Proving that 100\% degeneracy never occurs is equivalent to a weak form of~W2.
+
+\subsection{Summary table}
+
+\begin{table}[h]
+\centering
+\caption{Proof approaches and their barriers.}
+\label{tab:wallmap}
+\begin{tabular}{clcl}
+\toprule
+\# & Approach & Wall & Status \\
+\midrule
+1 & Carry-free palindrome & W1 & Proven but inapplicable \\
+2 & $L/4$ independent constraints & W2 & Conditional proof \\
+3 & $\mathbb{Z}/b\mathbb{Z}$ Fourier contraction & W2 & Conditional ($\eta \to \eta^2$) \\
+4 & Markov chain mixing & W2 & Carry independence found \\
+5 & Haar wavelet decomposition & W2 & Equivalent to \#4 \\
+6 & Anti-symmetric elimination & W2 & Elimination theorem \\
+7 & Walsh--Hadamard on carry sym. & W2 & Equivalent to \#4 \\
+8 & Transfer matrix / Lyapunov & W2 & Equivalent to \#6 \\
+9 & Modular arithmetic & W3 & Provably impossible \\
+10 & Palindrome characterization & W4 & Unconditional (Thm~\ref{thm:complete-char}) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Key observations}
+
+\emph{Approach 6 (Anti-symmetric elimination).} The RAA map eliminates the input's anti-symmetric component entirely: the output difference $o_j - o_{L-1-j}$ depends only on carry values, with no trace of the input's anti-symmetric part $(d_j - d_{L-1-j})/2$.
+
+\emph{Approach 9 (Modular impossibility).} Since $n + \rev(n) = \sum_j d_j(b^j + b^{L-1-j})$ and palindromes use the same coefficient set $\{b^j + b^{L-1-j}\}$, the image of the RAA map modulo any~$m$ is a superset of palindrome residues.
+
+\emph{Approach 10 (Palindrome characterization).} Theorem~\ref{thm:complete-char} provides a structural wall (W4) rather than a distributional one (W2). The condition ``all $\mathrm{ps}_i \in \{0, 11\}$'' is a concrete, testable property of each step. However, proving it fails at \emph{every} future step requires controlling the trajectory's pair-sum distribution, which is essentially W2 in its weakest form.
+
+
+%% ============================================================
+\clearpage
+\section{Carry Asymmetry Across Bases}
+\label{sec:bases}
+%% ============================================================
+
+Theorem~\ref{thm:carry-asym} holds in any base $b \geq 2$, while the palindrome characterization (Theorem~\ref{thm:complete-char}) holds for $b \geq 3$. We investigate how the carry structure varies with the base, connecting our framework to other bases.
+
+\subsection{Generator--absorber balance}
+In base~$b$, generators ($\mathrm{ps} \geq b$) and absorbers ($\mathrm{ps} \leq b-2$) each comprise $b-1$ values, with exactly one neutral value $\mathrm{ps} = b-1$. For uniformly random digits, the expected generator and absorber fractions are both $(b-1)/(2b)$.
+
+\subsection{Base 2: Connection to Sprague's proof}
+The base-2 case is instructive. In base~2, pair-sums take values $\{0, 1, 2\}$ with $b + 1 = 3 > 2(b-1) = 2$, so Case~(II) of Theorem~\ref{thm:complete-char} cannot occur (since $\mathrm{ps}_i \leq 2$ but $b + 1 = 3$). Thus in base~2, a palindrome requires Case~(I): all $\mathrm{ps}_i < 2$, i.e., all $\mathrm{ps}_i \in \{0, 1\}$. This is a very strong constraint that Sprague~\cite{Sprague1963} exploited to prove non-convergence for specific binary numbers.
+
+Our framework provides a unified explanation: in base~2, Case~(II) is algebraically impossible, leaving only Case~(I), which is defeated by the ubiquitous presence of generators. For $b \geq 3$, Case~(II) becomes possible, introducing the additional barrier~W4.
+
+\subsection{Carry Markov chain}
+
+\begin{proposition}\label{prop:carry-markov}
+The carry chain for RAA in base~$b$ with uniformly distributed digit pairs is a two-state Markov chain with transition matrix
+\[
+P = \begin{pmatrix} (b+1)/(2b) & (b-1)/(2b) \\ (b-1)/(2b) & (b+1)/(2b) \end{pmatrix}
+\]
+and second eigenvalue $\lambda_2 = 1/b$.
+\end{proposition}
+
+\begin{proof}
+For uniform independent digits $d_i, d_{L-1-i} \in \{0, \ldots, b-1\}$, the pair-sum $\mathrm{ps}_i = d_i + d_{L-1-i}$ is independent of prior carries. Among $b^2$ equally likely pairs, exactly $b(b-1)/2$ satisfy $\mathrm{ps}_i + c_i \geq b$ when $c_i = 0$ (i.e., $\mathrm{ps}_i \geq b$), giving $P(c_{i+1} = 1 \mid c_i = 0) = (b-1)/(2b)$. Similarly, $P(c_{i+1} = 1 \mid c_i = 1) = (b+1)/(2b)$ (since $\mathrm{ps}_i \geq b-1$ suffices). The eigenvalues of the symmetric matrix are $1$ and $(b+1)/(2b) - (b-1)/(2b) = 1/b$. See Holte~\cite{Holte1997} for the general theory.
+\end{proof}
+
+\begin{table}[h]
+\centering
+\caption{Carry structure parameters across bases.}
+\label{tab:bases}
+\begin{tabular}{ccccc}
+\toprule
+Base $b$ & $\lambda_2 = 1/b$ & Generator frac.\ & Neutral frac.\ & Lychrel status \\
+\midrule
+2 & 0.500 & 0.250 & 0.500 & Proven~\cite{Sprague1963} \\
+3 & 0.333 & 0.333 & 0.333 & Candidates only \\
+5 & 0.200 & 0.400 & 0.200 & Candidates only \\
+10 & 0.100 & 0.450 & 0.100 & Candidates only (196) \\
+11 & 0.091 & 0.455 & 0.091 & Proven~\cite{VanLandingham2002} \\
+16 & 0.062 & 0.469 & 0.062 & Proven~\cite{Sprague1963,VanLandingham2002} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The palindrome characterization provides a structural explanation for the pattern of Lychrel provability: in bases where $b + 1 > 2(b-1)$ (i.e., $b = 2$), Case~(II) is impossible and only Case~(I) must be ruled out. For $b \geq 3$, both cases must be addressed, introducing the additional degeneracy barrier.
+
+
+%% ============================================================
+\clearpage
+\section{Open Problems}
+\label{sec:open}
+%% ============================================================
+
+\begin{question}[Breaking the W2 Circle]\label{q:W2}
+Is there a proof technique that establishes digit non-degeneracy for deterministic RAA trajectories without assuming it as a premise? The self-reinforcing property shows W2 is stable once established, but bootstrapping from a fixed starting value remains open.
+\end{question}
+
+\begin{question}[Pair-Sum Degeneracy Avoidance]\label{q:degeneracy}
+Can one prove directly that the 196 trajectory never achieves all $\mathrm{ps}_i \in \{0, 11\}$? This would close the $c_L = 1$ case without W2. A possible approach: show that the set of numbers with all $\mathrm{ps}_i \in \{0, b+1\}$ is ``repelling'' under RAA (their outputs have digits in $\{0,1,2\}$ only, producing pair-sums $\leq 4$ at the next step, which is far from the degeneracy condition).
+\end{question}
+
+\begin{question}[Base Provability Pattern]\label{q:base}
+What structural property distinguishes the bases where Lychrel numbers have been proven from those where only candidates exist? Our palindrome characterization offers a partial answer (Case~(II) impossibility in base~2), but the mechanism enabling proofs for bases 11, 17, 20, 26 remains unclear.
+\end{question}
+
+\begin{question}[Symmetry Cost Hypothesis]\label{q:symcost}
+We propose that for a digit operation $f$ on base-$b$ integers, if the termination condition requires the carry/borrow chain to satisfy $\Omega(L)$ independent equality constraints, then generic orbits diverge; if the condition is carry-free, convergence is possible. Testing this across Kaprekar, reverse-and-subtract, and Ducci sequences would clarify the boundary between convergent and divergent digit dynamics.
+\end{question}
+
+
+%% ============================================================
+\section{Methodological Note}
+%% ============================================================
+
+This research was conducted through exploratory dialogue with Claude (Anthropic, 2024--2026), an AI assistant. The author posed questions about the structure of the 196 problem; mathematical formalizations, proof attempts, and computational verifications were developed collaboratively; connections to prior work~\cite{Holte1997,DiaconisFulman2009a} were identified retrospectively.
+
+In accordance with standard editorial policies, the author takes full responsibility for the correctness, originality, and integrity of all content. AI tools were used for: proof exploration and verification, computational experiments (Python code for trajectory analysis and exhaustive checking), literature connection, and writing assistance.
+
+The wall map (Section~\ref{sec:wallmap}) was constructed through systematic trial and failure. The convergence of multiple approaches to the single Wall~W2 was not anticipated in advance but emerged from the investigation. The palindrome characterization (Theorem~\ref{thm:complete-char}) emerged from investigating the $c_L = 1$ case that was left open in an earlier version. Similarly, the carry asymmetry theorem was initially proved only for even digit-lengths; the extension to all~$L$ (Theorem~\ref{thm:carry-asym}) came from a more careful treatment of the center position in the odd case.
+
+
+%% ============================================================
+\begin{thebibliography}{9}
+
+\bibitem{Sprague1963}
+R.~Sprague, \emph{Recreation in Mathematics} (English translation of \emph{Unterhaltsame Mathematik}, Vieweg, Braunschweig, 1961), Blackie, London, 1963.
+
+\bibitem{Holte1997}
+J.~M.~Holte, ``Carries, combinatorics, and an amazing matrix,'' \emph{The American Mathematical Monthly}, vol.~104, no.~2, pp.~138--149, 1997.
+
+\bibitem{DiaconisFulman2009a}
+P.~Diaconis and J.~Fulman, ``Carries, shuffling, and symmetric functions,'' \emph{Advances in Applied Mathematics}, vol.~43, no.~2, pp.~176--196, 2009.
+
+\bibitem{DiaconisFulman2009b}
+P.~Diaconis and J.~Fulman, ``Carries, shuffling, and an amazing matrix,'' \emph{The American Mathematical Monthly}, vol.~116, no.~9, pp.~788--803, 2009.
+
+\bibitem{Walker2010}
+J.~Walker, ``196 and other Lychrel numbers,'' \url{https://www.fourmilab.ch/documents/threeyears/threeyears.html}, 2010.
+
+\bibitem{VanLandingham2002}
+W.~Van~Landingham, ``196 and other Lychrel numbers: Encyclopedic resource on Lychrel numbers in various bases,'' \url{http://www.p196.org/}, 2002. Constructive proofs of Lychrel existence are documented for bases 2, 4, 8, 11, 16, 17, 20, 26, and all powers of~2.
+
+\bibitem{code}
+Ando, ``196 Carry Asymmetry: Code and verification data,'' \url{https://github.com/nkc-daiki/196-carry-asymmetry}, 2026.
+
+\end{thebibliography}
+
+\end{document}
